@@ -1,0 +1,22 @@
+[package]
+name = "wgpu-pcd"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wgpu = "24.0"
+cgmath = "0.18.0"
+env_logger = "0.11.6"
+futures = "0.3.17"
+gfx-hal = "0.9.0"
+image = "0.25.5"
+log = "0.4.14"
+pollster = "0.4.0"
+winit = "0.29"
+bytemuck = { version = "1.4.0", features = ["derive"] }
+anyhow = "1.0"
+rand = "0.9.0"
+cfg-if = "1"
