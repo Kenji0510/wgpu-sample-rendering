@@ -5,16 +5,23 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(1) @interpolate(flat) uv: vec2<f32>,
-    // @location(1) @interpolate(perspective) uv: vec2<f32>,
+    // @location(1) @interpolate(flat) uv: vec2<f32>,
+    @location(1) @interpolate(perspective) uv: vec2<f32>,
 };
+
+struct Uniforms {
+    rotation: mat4x4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> uniforms: Uniforms;
 
 @vertex
 fn vs_main(
     model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
-    out.position = vec4<f32>(model.position, 0.0, 1.0);
+    out.position = uniforms.rotation * vec4<f32>(model.position, 0.0, 1.0);
     out.uv = model.uv;
     return out;
 }

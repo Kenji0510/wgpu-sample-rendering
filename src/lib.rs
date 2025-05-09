@@ -1,3 +1,4 @@
+use rand::distr::uniform;
 use wgpu::util::DeviceExt;
 use winit::{
     event::*,
@@ -5,6 +6,8 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowBuilder},
 };
+
+use glam::{Mat4, Vec3};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -14,6 +17,12 @@ use wasm_bindgen::prelude::*;
 struct Vertex {
     position: [f32; 2],
     uv: [f32; 2],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct Uniforms {
+    rotation: [[f32; 4]; 4],
 }
 
 impl Vertex {
@@ -84,7 +93,10 @@ struct State<'a> {
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
+    uniform_bind_group: wgpu::BindGroup,
+    uniform_buffer: wgpu::Buffer,
     num_indices: u32,
+    rotation_angle: f32,
 }
 
 impl<'a> State<'a> {
@@ -153,6 +165,45 @@ impl<'a> State<'a> {
             view_formats: vec![],
         };
 
+        surface.configure(&device, &config);
+
+        let axis = Vec3::Z;
+        let angle = std::f32::consts::FRAC_PI_4;
+        let rotation = Mat4::from_axis_angle(axis, angle);
+        let uniform = Uniforms {
+            rotation: rotation.to_cols_array_2d(),
+        };
+
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let uniform_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("uniform_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("uniform_bind_group"),
+            layout: &uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -161,7 +212,7 @@ impl<'a> State<'a> {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[&uniform_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -234,7 +285,10 @@ impl<'a> State<'a> {
             render_pipeline,
             vertex_buffer,
             index_buffer,
+            uniform_bind_group,
+            uniform_buffer,
             num_indices,
+            rotation_angle: 0.0,
         }
     }
 
@@ -255,7 +309,17 @@ impl<'a> State<'a> {
         false
     }
 
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        self.rotation_angle += 0.05;
+
+        let rot = Mat4::from_axis_angle(Vec3::Z, self.rotation_angle);
+        let uniforms = Uniforms {
+            rotation: rot.to_cols_array_2d(),
+        };
+
+        self.queue
+            .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+    }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
@@ -290,6 +354,7 @@ impl<'a> State<'a> {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
