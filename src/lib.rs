@@ -15,7 +15,7 @@ use wasm_bindgen::prelude::*;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
-    position: [f32; 2],
+    position: [f32; 3],
     uv: [f32; 2],
 }
 
@@ -34,7 +34,7 @@ impl Vertex {
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x2,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
                     offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
@@ -48,35 +48,35 @@ impl Vertex {
 
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-0.5, -0.5],
+        position: [-0.5, -0.5, 0.0],
         uv: [0.0, 1.0],
     }, //Left down
     Vertex {
-        position: [0.5, -0.5],
+        position: [0.5, -0.5, 0.0],
         uv: [1.0, 1.0],
     }, // Right down
     Vertex {
-        position: [-0.5, 0.5],
+        position: [-0.5, 0.5, 0.0],
         uv: [0.0, 0.0],
     }, // Left up
     Vertex {
-        position: [0.5, 0.5],
+        position: [0.5, 0.5, 0.0],
         uv: [1.0, 0.0],
     }, // Right up
     Vertex {
-        position: [0.0, 1.0],
+        position: [0.0, 1.0, 0.0],
         uv: [0.5, 0.5],
     }, //Center above
     Vertex {
-        position: [1.0, 0.0],
+        position: [1.0, 0.0, 0.0],
         uv: [1.0, 0.0],
     }, // Right
     Vertex {
-        position: [0.0, -1.0],
+        position: [0.0, -1.0, 0.0],
         uv: [0.0, 1.0],
     }, // Down
     Vertex {
-        position: [-1.0, 0.0],
+        position: [-1.0, 0.0, 0.6],
         uv: [0.5, 0.5],
     }, // Left
 ];
