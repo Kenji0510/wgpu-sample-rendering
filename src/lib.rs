@@ -48,40 +48,49 @@ impl Vertex {
 
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-0.5, -0.5, 0.0],
-        uv: [0.0, 1.0],
-    }, //Left down
-    Vertex {
-        position: [0.5, -0.5, 0.0],
-        uv: [1.0, 1.0],
-    }, // Right down
-    Vertex {
-        position: [-0.5, 0.5, 0.0],
+        position: [-0.5, -0.5, 0.5],
         uv: [0.0, 0.0],
-    }, // Left up
+    }, //Left down: 0
     Vertex {
-        position: [0.5, 0.5, 0.0],
+        position: [0.5, -0.5, 0.5],
         uv: [1.0, 0.0],
-    }, // Right up
+    }, // Right down: 1
     Vertex {
-        position: [0.0, 1.0, 0.0],
-        uv: [0.5, 0.5],
-    }, //Center above
+        position: [0.5, 0.5, 0.5],
+        uv: [1.0, 1.0],
+    }, // Right up: 2
     Vertex {
-        position: [1.0, 0.0, 0.0],
-        uv: [1.0, 0.0],
-    }, // Right
-    Vertex {
-        position: [0.0, -1.0, 0.0],
+        position: [-0.5, 0.5, 0.5],
         uv: [0.0, 1.0],
-    }, // Down
+    }, // Left up: 3
+    // Back
     Vertex {
-        position: [-1.0, 0.0, 0.6],
-        uv: [0.5, 0.5],
-    }, // Left
+        position: [-0.5, -0.5, -0.5],
+        uv: [1.0, 0.0],
+    }, //Center above: 4
+    Vertex {
+        position: [0.5, -0.5, -0.5],
+        uv: [0.0, 0.0],
+    }, // Right: 5
+    Vertex {
+        position: [0.5, 0.5, -0.5],
+        uv: [0.0, 1.0],
+    }, // Down: 6
+    Vertex {
+        position: [-0.5, 0.5, -0.5],
+        uv: [1.0, 1.0],
+    }, // Left: 7
 ];
 
-const INDICES: &[u16] = &[0, 1, 2, 2, 1, 3, 2, 3, 4, 1, 5, 3, 0, 6, 1, 2, 7, 0];
+const INDICES: &[u16] = &[
+    // 前面
+    0, 1, 2, 2, 3, 0, // 右面
+    1, 5, 6, 6, 2, 1, // 背面
+    5, 4, 7, 7, 6, 5, // 左面
+    4, 0, 3, 3, 7, 4, // 上面
+    3, 2, 6, 6, 7, 3, // 下面
+    4, 5, 1, 1, 0, 4,
+];
 
 struct State<'a> {
     surface: wgpu::Surface<'a>,
@@ -167,9 +176,13 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
-        let axis = Vec3::Z;
-        let angle = std::f32::consts::FRAC_PI_4;
-        let rotation = Mat4::from_axis_angle(axis, angle);
+        let rotation_angle = 0.0;
+        let x_rotation_angle = 0.0;
+
+        let rot_y = Mat4::from_axis_angle(Vec3::Y, rotation_angle);
+        let rot_x = Mat4::from_axis_angle(Vec3::X, x_rotation_angle);
+        let rotation = rot_y * rot_x;
+
         let uniform = Uniforms {
             rotation: rotation.to_cols_array_2d(),
         };
@@ -310,9 +323,11 @@ impl<'a> State<'a> {
     }
 
     fn update(&mut self) {
-        self.rotation_angle += 0.05;
+        self.rotation_angle += 0.03;
 
-        let rot = Mat4::from_axis_angle(Vec3::Z, self.rotation_angle);
+        let rot_y = Mat4::from_axis_angle(Vec3::Y, self.rotation_angle);
+        let rot_x = Mat4::from_axis_angle(Vec3::X, self.rotation_angle);
+        let rot = rot_y * rot_x;
         let uniforms = Uniforms {
             rotation: rot.to_cols_array_2d(),
         };
