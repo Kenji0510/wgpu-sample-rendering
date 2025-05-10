@@ -415,6 +415,11 @@ impl<'a> State<'a> {
                 DepthTexture::create_depth_texture(&self.device, &self.config, "depth_texture")
                     .texture;
             self.surface.configure(&self.device, &self.config);
+
+            let depth =
+                DepthTexture::create_depth_texture(&self.device, &self.config, "depth_texture");
+            self.depth_texture = depth.texture;
+            self.depth_view = depth.view;
         }
     }
 
