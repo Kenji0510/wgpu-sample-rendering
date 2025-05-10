@@ -22,7 +22,7 @@ struct Vertex {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct Uniforms {
-    rotation: [[f32; 4]; 4],
+    transform: [[f32; 4]; 4],
 }
 
 pub struct DepthTexture {
@@ -161,6 +161,8 @@ struct State<'a> {
     rotation_angle: f32,
     depth_texture: wgpu::Texture,
     depth_view: wgpu::TextureView,
+    view: Mat4,
+    proj: Mat4,
 }
 
 impl<'a> State<'a> {
@@ -248,16 +250,27 @@ impl<'a> State<'a> {
 
         let depth_texture = DepthTexture::create_depth_texture(&device, &config, "depth_texture");
 
-        let rotation_angle = 0.0;
-        let x_rotation_angle = 0.0;
+        let aspect = config.width as f32 / config.height as f32;
 
-        let rot_y = Mat4::from_axis_angle(Vec3::Y, rotation_angle);
-        let rot_x = Mat4::from_axis_angle(Vec3::X, x_rotation_angle);
-        let rotation = rot_y * rot_x;
+        let proj = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 100.0);
 
+        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 2.0), Vec3::ZERO, Vec3::Y);
+
+        let initial_mvp = proj * view * Mat4::IDENTITY;
         let uniform = Uniforms {
-            rotation: rotation.to_cols_array_2d(),
+            transform: initial_mvp.to_cols_array_2d(),
         };
+
+        // let rotation_angle = 0.0;
+        // let x_rotation_angle = 0.0;
+
+        // let rot_y = Mat4::from_axis_angle(Vec3::Y, rotation_angle);
+        // let rot_x = Mat4::from_axis_angle(Vec3::X, x_rotation_angle);
+        // let rotation = rot_y * rot_x;
+
+        // let uniform = Uniforms {
+        //     transform: rotation.to_cols_array_2d(),
+        // };
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
@@ -384,6 +397,8 @@ impl<'a> State<'a> {
             rotation_angle: 0.0,
             depth_texture: depth_texture.texture,
             depth_view: depth_texture.view,
+            view,
+            proj,
         }
     }
 
@@ -413,8 +428,10 @@ impl<'a> State<'a> {
         let rot_y = Mat4::from_axis_angle(Vec3::Y, self.rotation_angle);
         let rot_x = Mat4::from_axis_angle(Vec3::X, self.rotation_angle);
         let rot = rot_y * rot_x;
+
+        let mvp = self.proj * self.view * rot;
         let uniforms = Uniforms {
-            rotation: rot.to_cols_array_2d(),
+            transform: mvp.to_cols_array_2d(),
         };
 
         self.queue
