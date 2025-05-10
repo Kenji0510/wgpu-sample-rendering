@@ -25,6 +25,43 @@ struct Uniforms {
     transform: [[f32; 4]; 4],
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Instance {
+    model: [[f32; 4]; 4],
+}
+
+impl Instance {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Instance>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 16,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 32,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 48,
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        }
+    }
+}
+
 pub struct DepthTexture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -153,12 +190,13 @@ struct State<'a> {
     size: winit::dpi::PhysicalSize<u32>,
     window: &'a Window,
     render_pipeline: wgpu::RenderPipeline,
+    instances: Vec<Instance>,
+    instance_buffer: wgpu::Buffer,
+    instance_count: u32,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
-    uniform_bind_group2: wgpu::BindGroup,
-    uniform_buffer2: wgpu::Buffer,
     num_indices: u32,
     rotation_angle: f32,
     depth_texture: wgpu::Texture,
@@ -241,7 +279,7 @@ impl<'a> State<'a> {
 
         let proj = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 100.0);
 
-        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 2.0), Vec3::ZERO, Vec3::Y);
+        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 8.0), Vec3::ZERO, Vec3::Y);
 
         let initial_mvp = proj * view * Mat4::IDENTITY;
         let uniform = Uniforms {
@@ -278,26 +316,6 @@ impl<'a> State<'a> {
             }],
         });
 
-        let offset = 1.0;
-        let model2 = Mat4::from_translation(Vec3::new(offset, 0.0, 0.0));
-        let initial_mvp2 = proj * view * model2;
-        let uniform2 = Uniforms {
-            transform: initial_mvp2.to_cols_array_2d(),
-        };
-        let uniform_buffer2 = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Uniform Buffer 2"),
-            contents: bytemuck::cast_slice(&[uniform2]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-        let uniform_bind_group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("uniform_bind_group2"),
-            layout: &uniform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer2.as_entire_binding(),
-            }],
-        });
-
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -316,7 +334,7 @@ impl<'a> State<'a> {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()],
+                buffers: &[Vertex::desc(), Instance::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -363,6 +381,22 @@ impl<'a> State<'a> {
             cache: None,
         });
 
+        let mut instances = Vec::new();
+        for i in 0..10 {
+            let tx = (i as f32 - 4.5) * 0.6;
+            let model = Mat4::from_translation(Vec3::new(tx, 0.0, 0.0));
+            instances.push(Instance {
+                model: model.to_cols_array_2d(),
+            });
+        }
+        let instance_count = instances.len() as u32;
+
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instances Buffer"),
+            contents: bytemuck::cast_slice(&instances),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(VERTICES),
@@ -385,12 +419,13 @@ impl<'a> State<'a> {
             size,
             window,
             render_pipeline,
+            instances,
+            instance_buffer,
+            instance_count,
             vertex_buffer,
             index_buffer,
             uniform_bind_group,
             uniform_buffer,
-            uniform_bind_group2,
-            uniform_buffer2,
             num_indices,
             rotation_angle: 0.0,
             depth_texture: depth_texture.texture,
@@ -446,17 +481,17 @@ impl<'a> State<'a> {
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
 
-        let ty2 = self.rotation_angle.tan() * 0.5;
-        let translation2 = Mat4::from_translation(Vec3::new(0.0, ty2, 0.0));
-        let model = translation2 * rot;
+        for inst in &mut self.instances {
+            let base = Mat4::from_cols_array_2d(&inst.model);
+            let m = base * rot;
+            inst.model = m.to_cols_array_2d();
+        }
 
-        let mvp2 = self.proj * self.view * model;
-        let uniforms2 = Uniforms {
-            transform: mvp2.to_cols_array_2d(),
-        };
-
-        self.queue
-            .write_buffer(&self.uniform_buffer2, 0, bytemuck::cast_slice(&[uniforms2]));
+        self.queue.write_buffer(
+            &self.instance_buffer,
+            0,
+            bytemuck::cast_slice(&self.instances),
+        );
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -502,11 +537,11 @@ impl<'a> State<'a> {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
-            // Second cube
-            render_pass.set_bind_group(0, &self.uniform_bind_group2, &[]);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            // render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            // Instances
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instance_count);
         }
 
         // submit will accept anything that implements IntoIter
