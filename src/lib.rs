@@ -382,12 +382,29 @@ impl<'a> State<'a> {
         });
 
         let mut instances = Vec::new();
+        // for i in 0..10 {
+        //     let tx = (i as f32 - 4.5) * 0.6;
+        //     let model = Mat4::from_translation(Vec3::new(tx, 0.0, 0.0));
+        //     instances.push(Instance {
+        //         model: model.to_cols_array_2d(),
+        //     });
+        // }
+        // for i in 0..10 {
+        //     let ty = (i as f32 - 4.5) * 0.6;
+        //     let model = Mat4::from_translation(Vec3::new(0.0, ty, 0.0));
+        //     instances.push(Instance {
+        //         model: model.to_cols_array_2d(),
+        //     });
+        // }
         for i in 0..10 {
-            let tx = (i as f32 - 4.5) * 0.6;
-            let model = Mat4::from_translation(Vec3::new(tx, 0.0, 0.0));
-            instances.push(Instance {
-                model: model.to_cols_array_2d(),
-            });
+            for j in 0..10 {
+                let tx = (j as f32 - 4.5) * 1.0;
+                let ty = (i as f32 - 4.5) * 1.0;
+                let model = Mat4::from_translation(Vec3::new(tx, ty, 0.0));
+                instances.push(Instance {
+                    model: model.to_cols_array_2d(),
+                });
+            }
         }
         let instance_count = instances.len() as u32;
 
