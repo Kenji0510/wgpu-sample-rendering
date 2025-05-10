@@ -10,7 +10,7 @@ struct VertexOutput {
 };
 
 struct Uniforms {
-    rotation: mat4x4<f32>,
+    transform: mat4x4<f32>,
 };
 
 @group(0) @binding(0)
@@ -21,7 +21,7 @@ fn vs_main(
     model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
-    out.position = uniforms.rotation * vec4<f32>(model.position, 1.0);
+    out.position = uniforms.transform * vec4<f32>(model.position, 1.0);
     out.uv = model.uv;
     return out;
 }

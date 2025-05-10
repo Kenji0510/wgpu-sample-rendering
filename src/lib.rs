@@ -233,21 +233,6 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
-        // let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
-        //     label: Some("depth_texture"),
-        //     size: wgpu::Extent3d {
-        //         width: size.width,
-        //         height: size.height,
-        //         depth_or_array_layers: 1,
-        //     },
-        //     mip_level_count: 1,
-        //     sample_count: 1,
-        //     dimension: wgpu::TextureDimension::D2,
-        //     format: wgpu::TextureFormat::Depth24Plus,
-        //     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        //     view_formats: &[],
-        // });
-
         let depth_texture = DepthTexture::create_depth_texture(&device, &config, "depth_texture");
 
         let aspect = config.width as f32 / config.height as f32;
@@ -260,17 +245,6 @@ impl<'a> State<'a> {
         let uniform = Uniforms {
             transform: initial_mvp.to_cols_array_2d(),
         };
-
-        // let rotation_angle = 0.0;
-        // let x_rotation_angle = 0.0;
-
-        // let rot_y = Mat4::from_axis_angle(Vec3::Y, rotation_angle);
-        // let rot_x = Mat4::from_axis_angle(Vec3::X, x_rotation_angle);
-        // let rotation = rot_y * rot_x;
-
-        // let uniform = Uniforms {
-        //     transform: rotation.to_cols_array_2d(),
-        // };
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Uniform Buffer"),
@@ -415,6 +389,11 @@ impl<'a> State<'a> {
                 DepthTexture::create_depth_texture(&self.device, &self.config, "depth_texture")
                     .texture;
             self.surface.configure(&self.device, &self.config);
+
+            let depth =
+                DepthTexture::create_depth_texture(&self.device, &self.config, "depth_texture");
+            self.depth_texture = depth.texture;
+            self.depth_view = depth.view;
         }
     }
 
@@ -429,7 +408,13 @@ impl<'a> State<'a> {
         let rot_x = Mat4::from_axis_angle(Vec3::X, self.rotation_angle);
         let rot = rot_y * rot_x;
 
-        let mvp = self.proj * self.view * rot;
+        let tx = self.rotation_angle.tan() * 0.5;
+        let translation = Mat4::from_translation(Vec3::new(tx, 0.0, 0.0));
+        // let translation = Mat4::from_translation(Vec3::new(0.0, 0.0, tx));
+
+        let model = translation * rot;
+
+        let mvp = self.proj * self.view * model;
         let uniforms = Uniforms {
             transform: mvp.to_cols_array_2d(),
         };
