@@ -25,6 +25,59 @@ struct Uniforms {
     rotation: [[f32; 4]; 4],
 }
 
+pub struct DepthTexture {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub format: wgpu::TextureFormat,
+}
+
+impl DepthTexture {
+    pub fn create_depth_texture(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+        label: &str,
+    ) -> Self {
+        let format = wgpu::TextureFormat::Depth32Float;
+        let size = wgpu::Extent3d {
+            width: config.width,
+            height: config.height,
+            depth_or_array_layers: 1,
+        };
+
+        let desc = wgpu::TextureDescriptor {
+            label: Some(label),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+
+        let texture = device.create_texture(&desc);
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        // let sampler = device.create_sampler(
+        //     &wgpu::SamplerDescriptor {
+        //         address_mode_u: wgpu::AddressMode::ClampToEdge,
+        //         address_mode_v: wgpu::AddressMode::ClampToEdge,
+        //         address_mode_w: wgpu::AddressMode::ClampToEdge,
+        //         mag_filter: wgpu::FilterMode::Linear,
+        //         min_filter: wgpu::FilterMode::Linear,
+        //         mipmap_filter: wgpu::FilterMode::Nearest,
+        //         compare: Some(wgpu::CompareFunction::LessEqual),
+        //         load_min_clamp
+        //     }
+        // )
+
+        Self {
+            texture,
+            view,
+            format,
+        }
+    }
+}
+
 impl Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
@@ -48,36 +101,36 @@ impl Vertex {
 
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-0.5, -0.5, 0.5],
+        position: [-0.25, -0.25, 0.25],
         uv: [0.0, 0.0],
     }, //Left down: 0
     Vertex {
-        position: [0.5, -0.5, 0.5],
+        position: [0.25, -0.25, 0.25],
         uv: [1.0, 0.0],
     }, // Right down: 1
     Vertex {
-        position: [0.5, 0.5, 0.5],
+        position: [0.25, 0.25, 0.25],
         uv: [1.0, 1.0],
     }, // Right up: 2
     Vertex {
-        position: [-0.5, 0.5, 0.5],
+        position: [-0.25, 0.25, 0.25],
         uv: [0.0, 1.0],
     }, // Left up: 3
     // Back
     Vertex {
-        position: [-0.5, -0.5, -0.5],
+        position: [-0.25, -0.25, -0.25],
         uv: [1.0, 0.0],
     }, //Center above: 4
     Vertex {
-        position: [0.5, -0.5, -0.5],
+        position: [0.25, -0.25, -0.25],
         uv: [0.0, 0.0],
     }, // Right: 5
     Vertex {
-        position: [0.5, 0.5, -0.5],
+        position: [0.25, 0.25, -0.25],
         uv: [0.0, 1.0],
     }, // Down: 6
     Vertex {
-        position: [-0.5, 0.5, -0.5],
+        position: [-0.25, 0.25, -0.25],
         uv: [1.0, 1.0],
     }, // Left: 7
 ];
@@ -106,6 +159,8 @@ struct State<'a> {
     uniform_buffer: wgpu::Buffer,
     num_indices: u32,
     rotation_angle: f32,
+    depth_texture: wgpu::Texture,
+    depth_view: wgpu::TextureView,
 }
 
 impl<'a> State<'a> {
@@ -175,6 +230,23 @@ impl<'a> State<'a> {
         };
 
         surface.configure(&device, &config);
+
+        // let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+        //     label: Some("depth_texture"),
+        //     size: wgpu::Extent3d {
+        //         width: size.width,
+        //         height: size.height,
+        //         depth_or_array_layers: 1,
+        //     },
+        //     mip_level_count: 1,
+        //     sample_count: 1,
+        //     dimension: wgpu::TextureDimension::D2,
+        //     format: wgpu::TextureFormat::Depth24Plus,
+        //     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        //     view_formats: &[],
+        // });
+
+        let depth_texture = DepthTexture::create_depth_texture(&device, &config, "depth_texture");
 
         let rotation_angle = 0.0;
         let x_rotation_angle = 0.0;
@@ -253,20 +325,28 @@ impl<'a> State<'a> {
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::POLYGON_MODE_LINE
-                // or Features::POLYGON_MODE_POINT
-                polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
-                unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
-                conservative: false,
+                ..Default::default() // Setting this to anything other than Fill requires Features::POLYGON_MODE_LINE
+                                     // or Features::POLYGON_MODE_POINT
+                                     // polygon_mode: wgpu::PolygonMode::Fill,
+                                     // // Requires Features::DEPTH_CLIP_CONTROL
+                                     // unclipped_depth: false,
+                                     // // Requires Features::CONSERVATIVE_RASTERIZATION
+                                     // conservative: false,
             },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                // format: wgpu::TextureFormat::Depth24Plus,
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            // multisample: wgpu::MultisampleState {
+            //     count: 1,
+            //     mask: !0,
+            //     alpha_to_coverage_enabled: false,
+            // },
+            multisample: wgpu::MultisampleState::default(),
             // If the pipeline will be used with a multiview render pass, this
             // indicates how many array layers the attachments will have.
             multiview: None,
@@ -302,6 +382,8 @@ impl<'a> State<'a> {
             uniform_buffer,
             num_indices,
             rotation_angle: 0.0,
+            depth_texture: depth_texture.texture,
+            depth_view: depth_texture.view,
         }
     }
 
@@ -314,6 +396,9 @@ impl<'a> State<'a> {
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
+            self.depth_texture =
+                DepthTexture::create_depth_texture(&self.device, &self.config, "depth_texture")
+                    .texture;
             self.surface.configure(&self.device, &self.config);
         }
     }
@@ -323,7 +408,7 @@ impl<'a> State<'a> {
     }
 
     fn update(&mut self) {
-        self.rotation_angle += 0.03;
+        self.rotation_angle += 0.01;
 
         let rot_y = Mat4::from_axis_angle(Vec3::Y, self.rotation_angle);
         let rot_x = Mat4::from_axis_angle(Vec3::X, self.rotation_angle);
@@ -363,7 +448,15 @@ impl<'a> State<'a> {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                // depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
