@@ -145,6 +145,57 @@ const INDICES: &[u16] = &[
     4, 5, 1, 1, 0, 4,
 ];
 
+/// 頂点構造体はそのまま Vertex { position: [f32;3], uv: [f32;2] } とします。
+fn generate_uv_sphere(lat_segments: u32, long_segments: u32) -> (Vec<Vertex>, Vec<u16>) {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    // 頂点生成
+    for lat in 0..=lat_segments {
+        let theta = lat as f32 * std::f32::consts::PI / lat_segments as f32;
+        let sin_theta = theta.sin();
+        let cos_theta = theta.cos();
+
+        for lon in 0..=long_segments {
+            let phi = lon as f32 * 2.0 * std::f32::consts::PI / long_segments as f32;
+            let sin_phi = phi.sin();
+            let cos_phi = phi.cos();
+
+            let x = sin_theta * cos_phi;
+            let y = cos_theta;
+            let z = sin_theta * sin_phi;
+            let u = lon as f32 / long_segments as f32;
+            let v = lat as f32 / lat_segments as f32;
+
+            vertices.push(Vertex {
+                position: [x, y, z],
+                uv: [u, v],
+            });
+        }
+    }
+
+    // インデックス生成（TRIANGLE_LIST）
+    // まずは経度・緯度それぞれのセルを分割して四角形→三角形2つに
+    for lat in 0..lat_segments {
+        for lon in 0..long_segments {
+            let cur = lat * (long_segments + 1) + lon;
+            let next = cur + long_segments + 1;
+
+            // 三角形1：cur, next, cur+1
+            indices.push(cur as u16);
+            indices.push(next as u16);
+            indices.push((cur + 1) as u16);
+
+            // 三角形2：cur+1, next, next+1
+            indices.push((cur + 1) as u16);
+            indices.push(next as u16);
+            indices.push((next + 1) as u16);
+        }
+    }
+
+    (vertices, indices)
+}
+
 struct State<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
@@ -254,7 +305,7 @@ impl<'a> State<'a> {
 
         let proj = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 100.0);
 
-        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 2.0), Vec3::ZERO, Vec3::Y);
+        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 5.0), Vec3::ZERO, Vec3::Y);
 
         let initial_mvp = proj * view * Mat4::IDENTITY;
         let uniform = Uniforms {
@@ -367,19 +418,23 @@ impl<'a> State<'a> {
             cache: None,
         });
 
+        let (sphere_vertices, sphere_indices) = generate_uv_sphere(32, 32);
+
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
+            // contents: bytemuck::cast_slice(VERTICES),
+            contents: bytemuck::cast_slice(&sphere_vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
+            // contents: bytemuck::cast_slice(INDICES),
+            contents: bytemuck::cast_slice(&sphere_indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let num_indices = INDICES.len() as u32;
+        let num_indices = sphere_indices.len() as u32;
 
         Self {
             surface,
