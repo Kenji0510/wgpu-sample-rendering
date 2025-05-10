@@ -157,6 +157,8 @@ struct State<'a> {
     index_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
+    uniform_bind_group2: wgpu::BindGroup,
+    uniform_buffer2: wgpu::Buffer,
     num_indices: u32,
     rotation_angle: f32,
     depth_texture: wgpu::Texture,
@@ -276,6 +278,26 @@ impl<'a> State<'a> {
             }],
         });
 
+        let offset = 1.0;
+        let model2 = Mat4::from_translation(Vec3::new(offset, 0.0, 0.0));
+        let initial_mvp2 = proj * view * model2;
+        let uniform2 = Uniforms {
+            transform: initial_mvp2.to_cols_array_2d(),
+        };
+        let uniform_buffer2 = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Uniform Buffer 2"),
+            contents: bytemuck::cast_slice(&[uniform2]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let uniform_bind_group2 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("uniform_bind_group2"),
+            layout: &uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer2.as_entire_binding(),
+            }],
+        });
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -367,6 +389,8 @@ impl<'a> State<'a> {
             index_buffer,
             uniform_bind_group,
             uniform_buffer,
+            uniform_bind_group2,
+            uniform_buffer2,
             num_indices,
             rotation_angle: 0.0,
             depth_texture: depth_texture.texture,
@@ -421,6 +445,18 @@ impl<'a> State<'a> {
 
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+
+        let ty2 = self.rotation_angle.tan() * 0.5;
+        let translation2 = Mat4::from_translation(Vec3::new(0.0, ty2, 0.0));
+        let model = translation2 * rot;
+
+        let mvp2 = self.proj * self.view * model;
+        let uniforms2 = Uniforms {
+            transform: mvp2.to_cols_array_2d(),
+        };
+
+        self.queue
+            .write_buffer(&self.uniform_buffer2, 0, bytemuck::cast_slice(&[uniforms2]));
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -467,6 +503,9 @@ impl<'a> State<'a> {
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            // Second cube
+            render_pass.set_bind_group(0, &self.uniform_bind_group2, &[]);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
