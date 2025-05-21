@@ -25,6 +25,12 @@ struct Uniforms {
     transform: [[f32; 4]; 4],
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Instance {
+    model: [[f32; 4]; 4],
+}
+
 pub struct DepthTexture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -78,6 +84,37 @@ impl DepthTexture {
     }
 }
 
+impl Instance {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Instance>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 16,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 32,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 48,
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        }
+    }
+}
+
 impl Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
@@ -99,56 +136,11 @@ impl Vertex {
     }
 }
 
-const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-0.25, -0.25, 0.25],
-        uv: [0.0, 0.0],
-    }, //Left down: 0
-    Vertex {
-        position: [0.25, -0.25, 0.25],
-        uv: [1.0, 0.0],
-    }, // Right down: 1
-    Vertex {
-        position: [0.25, 0.25, 0.25],
-        uv: [1.0, 1.0],
-    }, // Right up: 2
-    Vertex {
-        position: [-0.25, 0.25, 0.25],
-        uv: [0.0, 1.0],
-    }, // Left up: 3
-    // Back
-    Vertex {
-        position: [-0.25, -0.25, -0.25],
-        uv: [1.0, 0.0],
-    }, //Center above: 4
-    Vertex {
-        position: [0.25, -0.25, -0.25],
-        uv: [0.0, 0.0],
-    }, // Right: 5
-    Vertex {
-        position: [0.25, 0.25, -0.25],
-        uv: [0.0, 1.0],
-    }, // Down: 6
-    Vertex {
-        position: [-0.25, 0.25, -0.25],
-        uv: [1.0, 1.0],
-    }, // Left: 7
-];
-
-const INDICES: &[u16] = &[
-    // 前面
-    0, 1, 2, 2, 3, 0, // 右面
-    1, 5, 6, 6, 2, 1, // 背面
-    5, 4, 7, 7, 6, 5, // 左面
-    4, 0, 3, 3, 7, 4, // 上面
-    3, 2, 6, 6, 7, 3, // 下面
-    4, 5, 1, 1, 0, 4,
-];
-
 /// 頂点構造体はそのまま Vertex { position: [f32;3], uv: [f32;2] } とします。
 fn generate_uv_sphere(lat_segments: u32, long_segments: u32) -> (Vec<Vertex>, Vec<u16>) {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
+    let radius = 0.25;
 
     // 頂点生成
     for lat in 0..=lat_segments {
@@ -161,9 +153,9 @@ fn generate_uv_sphere(lat_segments: u32, long_segments: u32) -> (Vec<Vertex>, Ve
             let sin_phi = phi.sin();
             let cos_phi = phi.cos();
 
-            let x = sin_theta * cos_phi;
-            let y = cos_theta;
-            let z = sin_theta * sin_phi;
+            let x = radius * sin_theta * cos_phi;
+            let y = radius * cos_theta;
+            let z = radius * sin_theta * sin_phi;
             let u = lon as f32 / long_segments as f32;
             let v = lat as f32 / lat_segments as f32;
 
@@ -204,6 +196,9 @@ struct State<'a> {
     size: winit::dpi::PhysicalSize<u32>,
     window: &'a Window,
     render_pipeline: wgpu::RenderPipeline,
+    instances: Vec<Instance>,
+    instance_buffer: wgpu::Buffer,
+    instance_count: u32,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
@@ -305,7 +300,7 @@ impl<'a> State<'a> {
 
         let proj = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 100.0);
 
-        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 5.0), Vec3::ZERO, Vec3::Y);
+        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 20.0), Vec3::ZERO, Vec3::Y);
 
         let initial_mvp = proj * view * Mat4::IDENTITY;
         let uniform = Uniforms {
@@ -371,7 +366,7 @@ impl<'a> State<'a> {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()],
+                buffers: &[Vertex::desc(), Instance::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -420,6 +415,31 @@ impl<'a> State<'a> {
 
         let (sphere_vertices, sphere_indices) = generate_uv_sphere(32, 32);
 
+        let mut instances = Vec::new();
+        let points_num = 10;
+
+        for i in 0..points_num {
+            for j in 0..points_num {
+                for k in 0..points_num {
+                    let tx = (j as f32 - 4.5) * 1.0;
+                    let ty = (i as f32 - 4.5) * 1.0;
+                    let tz = (k as f32 - (k as f32 - 1.0) / 2.0) * 2.0;
+                    let model = Mat4::from_translation(Vec3::new(tx, ty, tz));
+                    instances.push(Instance {
+                        model: model.to_cols_array_2d(),
+                    });
+                }
+            }
+        }
+
+        let instance_count = instances.len() as u32;
+
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instances Buffer"),
+            contents: bytemuck::cast_slice(&instances),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             // contents: bytemuck::cast_slice(VERTICES),
@@ -444,6 +464,9 @@ impl<'a> State<'a> {
             size,
             window,
             render_pipeline,
+            instances,
+            instance_buffer,
+            instance_count,
             vertex_buffer,
             index_buffer,
             uniform_bind_group,
@@ -489,7 +512,13 @@ impl<'a> State<'a> {
         let rot_x = Mat4::from_axis_angle(Vec3::X, self.rotation_angle);
         let rot = rot_y * rot_x;
 
-        let mvp = self.proj * self.view * rot;
+        let tx = self.rotation_angle.tan() * 0.5;
+        // let translation = Mat4::from_translation(Vec3::new(0.0, 0.0, 0.0));
+        let translation = Mat4::from_translation(Vec3::new(tx, 0.0, tx));
+
+        let model = translation * rot;
+
+        let mvp = self.proj * self.view * model;
         let uniforms = Uniforms {
             transform: mvp.to_cols_array_2d(),
         };
@@ -541,8 +570,11 @@ impl<'a> State<'a> {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            // render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            // Instances
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instance_count);
         }
 
         // submit will accept anything that implements IntoIter
