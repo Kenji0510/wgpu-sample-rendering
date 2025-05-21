@@ -300,7 +300,7 @@ impl<'a> State<'a> {
 
         let proj = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 100.0);
 
-        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 20.0), Vec3::ZERO, Vec3::Y);
+        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 70.0), Vec3::ZERO, Vec3::Y);
 
         let initial_mvp = proj * view * Mat4::IDENTITY;
         let uniform = Uniforms {
@@ -416,7 +416,8 @@ impl<'a> State<'a> {
         let (sphere_vertices, sphere_indices) = generate_uv_sphere(32, 32);
 
         let mut instances = Vec::new();
-        let points_num = 10;
+        let points_num = 50;
+        let scale = 0.5;
 
         for i in 0..points_num {
             for j in 0..points_num {
@@ -424,7 +425,8 @@ impl<'a> State<'a> {
                     let tx = (j as f32 - 4.5) * 1.0;
                     let ty = (i as f32 - 4.5) * 1.0;
                     let tz = (k as f32 - (k as f32 - 1.0) / 2.0) * 2.0;
-                    let model = Mat4::from_translation(Vec3::new(tx, ty, tz));
+                    let model = Mat4::from_translation(Vec3::new(tx, ty, tz))
+                        * Mat4::from_scale(Vec3::splat(scale));
                     instances.push(Instance {
                         model: model.to_cols_array_2d(),
                     });
