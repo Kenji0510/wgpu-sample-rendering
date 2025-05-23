@@ -473,7 +473,7 @@ impl<'a> State<'a> {
         let indices = INDICES;
 
         let mut instances = Vec::new();
-        let points_num = 50;
+        let points_num = 100;
         let spacing = 1.0;
         let center = (points_num as f32 - 1.0) / 2.0;
         let scale = 0.5;
@@ -629,6 +629,12 @@ impl<'a> State<'a> {
                     self.focus_point.z -= movement;
                     true
                 }
+                // Reset the coordination
+                KeyCode::KeyQ => {
+                    self.camera = cgmath::Vector3::new(0.0, 0.0, 70.0);
+                    self.focus_point = cgmath::Vector3::new(0.0, 0.0, 0.0);
+                    true
+                }
                 _ => false,
             }
         } else {
@@ -640,7 +646,7 @@ impl<'a> State<'a> {
         self.rotation_angle += 0.01;
 
         let rot_y = Mat4::from_axis_angle(Vec3::Y, self.rotation_angle);
-        let rot_x = Mat4::from_axis_angle(Vec3::X, self.rotation_angle);
+        let rot_x = Mat4::from_axis_angle(Vec3::X, 0.0);
         let rot = rot_y * rot_x;
 
         // let tx = self.rotation_angle.tan() * 0.5;
