@@ -188,6 +188,52 @@ fn generate_uv_sphere(lat_segments: u32, long_segments: u32) -> (Vec<Vertex>, Ve
     (vertices, indices)
 }
 
+const VERTICES: &[Vertex] = &[
+    Vertex {
+        position: [-0.25, -0.25, 0.25],
+        uv: [0.0, 0.0],
+    }, //Left down: 0
+    Vertex {
+        position: [0.25, -0.25, 0.25],
+        uv: [1.0, 0.0],
+    }, // Right down: 1
+    Vertex {
+        position: [0.25, 0.25, 0.25],
+        uv: [1.0, 1.0],
+    }, // Right up: 2
+    Vertex {
+        position: [-0.25, 0.25, 0.25],
+        uv: [0.0, 1.0],
+    }, // Left up: 3
+    // Back
+    Vertex {
+        position: [-0.25, -0.25, -0.25],
+        uv: [1.0, 0.0],
+    }, //Center above: 4
+    Vertex {
+        position: [0.25, -0.25, -0.25],
+        uv: [0.0, 0.0],
+    }, // Right: 5
+    Vertex {
+        position: [0.25, 0.25, -0.25],
+        uv: [0.0, 1.0],
+    }, // Down: 6
+    Vertex {
+        position: [-0.25, 0.25, -0.25],
+        uv: [1.0, 1.0],
+    }, // Left: 7
+];
+
+const INDICES: &[u16] = &[
+    // 前面
+    0, 1, 2, 2, 3, 0, // 右面
+    1, 5, 6, 6, 2, 1, // 背面
+    5, 4, 7, 7, 6, 5, // 左面
+    4, 0, 3, 3, 7, 4, // 上面
+    3, 2, 6, 6, 7, 3, // 下面
+    4, 5, 1, 1, 0, 4,
+];
+
 struct State<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
@@ -235,6 +281,9 @@ impl<'a> State<'a> {
             })
             .await
             .unwrap();
+
+        let buffer_limits = adapter.limits();
+        println!("Max buffer sizeL {}", buffer_limits.max_buffer_size);
 
         let (device, queue) = adapter
             .request_device(
@@ -413,18 +462,23 @@ impl<'a> State<'a> {
             cache: None,
         });
 
-        let (sphere_vertices, sphere_indices) = generate_uv_sphere(32, 32);
+        // let (sphere_vertices, sphere_indices) = generate_uv_sphere(6, 8);
+        let vertices = VERTICES;
+        let indices = INDICES;
 
         let mut instances = Vec::new();
         let points_num = 50;
+        let spacing = 1.0;
+        let center = (points_num as f32 - 1.0) / 2.0;
         let scale = 0.5;
 
         for i in 0..points_num {
             for j in 0..points_num {
                 for k in 0..points_num {
-                    let tx = (j as f32 - 4.5) * 1.0;
-                    let ty = (i as f32 - 4.5) * 1.0;
-                    let tz = (k as f32 - (k as f32 - 1.0) / 2.0) * 2.0;
+                    let tx = (j as f32 - center) * spacing;
+                    let ty = (i as f32 - center) * spacing;
+                    let tz = (k as f32 - center) * spacing;
+                    // let tz = (k as f32 - 4.5) * 1.0;
                     let model = Mat4::from_translation(Vec3::new(tx, ty, tz))
                         * Mat4::from_scale(Vec3::splat(scale));
                     instances.push(Instance {
@@ -445,18 +499,18 @@ impl<'a> State<'a> {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             // contents: bytemuck::cast_slice(VERTICES),
-            contents: bytemuck::cast_slice(&sphere_vertices),
+            contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
             // contents: bytemuck::cast_slice(INDICES),
-            contents: bytemuck::cast_slice(&sphere_indices),
+            contents: bytemuck::cast_slice(&indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let num_indices = sphere_indices.len() as u32;
+        let num_indices = indices.len() as u32;
 
         Self {
             surface,
@@ -514,7 +568,8 @@ impl<'a> State<'a> {
         let rot_x = Mat4::from_axis_angle(Vec3::X, self.rotation_angle);
         let rot = rot_y * rot_x;
 
-        let tx = self.rotation_angle.tan() * 0.5;
+        // let tx = self.rotation_angle.tan() * 0.5;
+        let tx = self.rotation_angle.tan() * 0.0;
         // let translation = Mat4::from_translation(Vec3::new(0.0, 0.0, 0.0));
         let translation = Mat4::from_translation(Vec3::new(tx, 0.0, tx));
 
