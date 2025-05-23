@@ -255,6 +255,8 @@ struct State<'a> {
     depth_view: wgpu::TextureView,
     view: Mat4,
     proj: Mat4,
+    camera: cgmath::Vector3<f32>,
+    focus_point: cgmath::Vector3<f32>,
 }
 
 impl<'a> State<'a> {
@@ -347,9 +349,13 @@ impl<'a> State<'a> {
 
         let aspect = config.width as f32 / config.height as f32;
 
-        let proj = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 100.0);
+        let proj = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 500.0);
 
-        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 70.0), Vec3::ZERO, Vec3::Y);
+        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 90.0), Vec3::ZERO, Vec3::Y);
+
+        let camera = cgmath::Vector3::new(0.0, 0.0, 70.0);
+
+        let focus_point = cgmath::Vector3::new(0.0, 0.0, 0.0);
 
         let initial_mvp = proj * view * Mat4::IDENTITY;
         let uniform = Uniforms {
@@ -533,6 +539,8 @@ impl<'a> State<'a> {
             depth_view: depth_texture.view,
             view,
             proj,
+            camera,
+            focus_point,
         }
     }
 
@@ -558,7 +566,74 @@ impl<'a> State<'a> {
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        false
+        let movement = 2.0;
+        // false
+        if let WindowEvent::KeyboardInput {
+            event:
+                KeyEvent {
+                    state: ElementState::Pressed,
+                    physical_key: PhysicalKey::Code(keycode),
+                    ..
+                },
+            ..
+        } = event
+        {
+            match keycode {
+                // For camera movement
+                KeyCode::ArrowRight => {
+                    self.camera.x += movement;
+                    true
+                }
+                KeyCode::ArrowLeft => {
+                    self.camera.x -= movement;
+                    true
+                }
+                KeyCode::ArrowUp => {
+                    self.camera.y -= movement;
+                    true
+                }
+                KeyCode::ArrowDown => {
+                    self.camera.y += movement;
+                    true
+                }
+                KeyCode::PageUp => {
+                    self.camera.z += movement;
+                    true
+                }
+                KeyCode::PageDown => {
+                    self.camera.z -= movement;
+                    true
+                }
+                // For focus point movement
+                KeyCode::KeyW => {
+                    self.focus_point.x += movement;
+                    true
+                }
+                KeyCode::KeyA => {
+                    self.focus_point.x -= movement;
+                    true
+                }
+                KeyCode::KeyE => {
+                    self.focus_point.y += movement;
+                    true
+                }
+                KeyCode::KeyS => {
+                    self.focus_point.y -= movement;
+                    true
+                }
+                KeyCode::KeyR => {
+                    self.focus_point.z += movement;
+                    true
+                }
+                KeyCode::KeyD => {
+                    self.focus_point.z -= movement;
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
     }
 
     fn update(&mut self) {
@@ -574,6 +649,10 @@ impl<'a> State<'a> {
         let translation = Mat4::from_translation(Vec3::new(tx, 0.0, tx));
 
         let model = translation * rot;
+
+        let camera_pos = Vec3::new(self.camera.x, self.camera.y, self.camera.z);
+        let focus_point = Vec3::new(self.focus_point.x, self.focus_point.y, self.focus_point.z);
+        self.view = Mat4::look_at_rh(camera_pos, focus_point, Vec3::Y);
 
         let mvp = self.proj * self.view * model;
         let uniforms = Uniforms {
