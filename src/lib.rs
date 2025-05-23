@@ -234,6 +234,10 @@ const INDICES: &[u16] = &[
     4, 5, 1, 1, 0, 4,
 ];
 
+const CHUNK_SIZE: u64 = 256 * 1024 * 1024; // 256MB
+const FLOAT_PER_CHUNK: usize = (CHUNK_SIZE / 4) as usize;
+const TOTAL_FLOATS: usize = FLOAT_PER_CHUNK * 4;
+
 struct State<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
@@ -243,8 +247,8 @@ struct State<'a> {
     window: &'a Window,
     render_pipeline: wgpu::RenderPipeline,
     instances: Vec<Instance>,
-    instance_buffer: wgpu::Buffer,
-    instance_count: u32,
+    instance_buffers: Vec<wgpu::Buffer>,
+    instance_counts: Vec<u32>,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
@@ -473,7 +477,7 @@ impl<'a> State<'a> {
         let indices = INDICES;
 
         let mut instances = Vec::new();
-        let points_num = 100;
+        let points_num = 300;
         let spacing = 1.0;
         let center = (points_num as f32 - 1.0) / 2.0;
         let scale = 0.5;
@@ -494,13 +498,31 @@ impl<'a> State<'a> {
             }
         }
 
+        let instance_size = std::mem::size_of::<Instance>();
         let instance_count = instances.len() as u32;
+        // let max_instances_per_buffer = CHUNK_SIZE / instance_size as u64;
+        let max_buffers = 8;
 
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instances Buffer"),
-            contents: bytemuck::cast_slice(&instances),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
+        let mut instance_buffers = Vec::new();
+        let mut instance_counts = Vec::new();
+
+        let chunk_size = ((instance_count + max_buffers - 1) / max_buffers) as usize;
+
+        for chunk in instances.chunks(chunk_size) {
+            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Instances Buffer"),
+                contents: bytemuck::cast_slice(chunk),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            });
+            instance_buffers.push(buffer);
+            instance_counts.push(chunk.len() as u32);
+        }
+
+        // let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Instances Buffer"),
+        //     contents: bytemuck::cast_slice(&instances),
+        //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        // });
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -527,8 +549,8 @@ impl<'a> State<'a> {
             window,
             render_pipeline,
             instances,
-            instance_buffer,
-            instance_count,
+            instance_buffers,
+            instance_counts,
             vertex_buffer,
             index_buffer,
             uniform_bind_group,
@@ -566,7 +588,7 @@ impl<'a> State<'a> {
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        let movement = 2.0;
+        let movement = 4.0;
         // false
         if let WindowEvent::KeyboardInput {
             event:
@@ -712,11 +734,13 @@ impl<'a> State<'a> {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             // render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
             // Instances
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instance_count);
+            for (i, buffer) in self.instance_buffers.iter().enumerate() {
+                render_pass.set_vertex_buffer(1, buffer.slice(..));
+                render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instance_counts[i]);
+            }
         }
 
         // submit will accept anything that implements IntoIter
