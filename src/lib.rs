@@ -253,14 +253,17 @@ struct State<'a> {
 
 impl<'a> State<'a> {
     async fn new(window: &'a Window) -> State<'a> {
-        let pcd_paths =
-            match load_pcd_paths("/Users/kenji/workspace/Rust/wgpu-pcd/data/", "Laser_map") {
-                Ok(paths) => paths,
-                Err(e) => {
-                    eprintln!("Error loading paths: {}", e);
-                    panic!();
-                }
-            };
+        // let pcd_paths =
+        //     match load_pcd_paths("/Users/kenji/workspace/Rust/wgpu-pcd/data/", "Laser_map") {
+        //         Ok(paths) => paths,
+        //         Err(e) => {
+        //             eprintln!("Error loading paths: {}", e);
+        //             panic!();
+        //         }
+        //     };
+        let pcd_paths: Vec<String> = vec![
+            "/Users/kenji/workspace/Rust/rerun-sample/data/Laser_map/Laser_map_130.pcd".to_string(),
+        ];
 
         let mut laser_map_points: Vec<(f32, f32, f32)> = Vec::new();
 
@@ -275,7 +278,7 @@ impl<'a> State<'a> {
 
             laser_map_points.extend(points_vec.iter().map(|pt| (pt.x, pt.y, pt.z)));
         }
-        // println!("Points: {:?}", laser_map_points);
+        println!("Num points: {:?}", laser_map_points.len());
 
         let size = window.inner_size();
 
@@ -298,7 +301,10 @@ impl<'a> State<'a> {
             .unwrap();
 
         let buffer_limits = adapter.limits();
-        println!("Max buffer sizeL {}", buffer_limits.max_buffer_size);
+        println!(
+            "GPU's max buffer size: {}bytes",
+            buffer_limits.max_buffer_size
+        );
 
         let (device, queue) = adapter
             .request_device(
