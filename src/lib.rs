@@ -7,6 +7,9 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
+mod load_pcd;
+use load_pcd::{Point, load_pcd, load_pcd_paths};
+
 use glam::{Mat4, Vec3};
 
 #[repr(C)]
@@ -250,6 +253,30 @@ struct State<'a> {
 
 impl<'a> State<'a> {
     async fn new(window: &'a Window) -> State<'a> {
+        let pcd_paths =
+            match load_pcd_paths("/Users/kenji/workspace/Rust/wgpu-pcd/data/", "Laser_map") {
+                Ok(paths) => paths,
+                Err(e) => {
+                    eprintln!("Error loading paths: {}", e);
+                    panic!();
+                }
+            };
+
+        let mut laser_map_points: Vec<(f32, f32, f32)> = Vec::new();
+
+        for path in pcd_paths.iter() {
+            let points_vec = match load_pcd(path) {
+                Ok(points) => points,
+                Err(e) => {
+                    eprintln!("Error loading PCD file: {}", e);
+                    panic!();
+                }
+            };
+
+            laser_map_points.extend(points_vec.iter().map(|pt| (pt.x, pt.y, pt.z)));
+        }
+        // println!("Points: {:?}", laser_map_points);
+
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -320,11 +347,11 @@ impl<'a> State<'a> {
 
         let aspect = config.width as f32 / config.height as f32;
 
-        let proj = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 500.0);
+        let proj = Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 100.0);
 
-        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 90.0), Vec3::ZERO, Vec3::Y);
+        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 10.0), Vec3::ZERO, Vec3::Y);
 
-        let camera = cgmath::Vector3::new(0.0, 0.0, 70.0);
+        let camera = cgmath::Vector3::new(0.0, 0.0, 10.0);
 
         let focus_point = cgmath::Vector3::new(0.0, 0.0, 0.0);
 
@@ -436,22 +463,29 @@ impl<'a> State<'a> {
         let points_num = 100;
         let spacing = 1.0;
         let center = (points_num as f32 - 1.0) / 2.0;
-        let scale = 0.5;
+        let scale = 0.05;
 
-        for i in 0..points_num {
-            for j in 0..points_num {
-                for k in 0..points_num {
-                    let tx = (j as f32 - center) * spacing;
-                    let ty = (i as f32 - center) * spacing;
-                    let tz = (k as f32 - center) * spacing;
-                    // let tz = (k as f32 - 4.5) * 1.0;
-                    let model = Mat4::from_translation(Vec3::new(tx, ty, tz))
-                        * Mat4::from_scale(Vec3::splat(scale));
-                    instances.push(Instance {
-                        model: model.to_cols_array_2d(),
-                    });
-                }
-            }
+        // for i in 0..points_num {
+        //     for j in 0..points_num {
+        //         for k in 0..points_num {
+        //             let tx = (j as f32 - center) * spacing;
+        //             let ty = (i as f32 - center) * spacing;
+        //             let tz = (k as f32 - center) * spacing;
+        //             // let tz = (k as f32 - 4.5) * 1.0;
+        //             let model = Mat4::from_translation(Vec3::new(tx, ty, tz))
+        //                 * Mat4::from_scale(Vec3::splat(scale));
+        //             instances.push(Instance {
+        //                 model: model.to_cols_array_2d(),
+        //             });
+        //         }
+        //     }
+        // }
+        for &(x, y, z) in laser_map_points.iter() {
+            let model =
+                Mat4::from_translation(Vec3::new(x, y, z)) * Mat4::from_scale(Vec3::splat(scale));
+            instances.push(Instance {
+                model: model.to_cols_array_2d(),
+            })
         }
 
         let instance_size = std::mem::size_of::<Instance>();
@@ -603,7 +637,7 @@ impl<'a> State<'a> {
                 }
                 // Reset the coordination
                 KeyCode::KeyQ => {
-                    self.camera = cgmath::Vector3::new(0.0, 0.0, 70.0);
+                    self.camera = cgmath::Vector3::new(0.0, 0.0, 20.0);
                     self.focus_point = cgmath::Vector3::new(0.0, 0.0, 0.0);
                     true
                 }
