@@ -10,6 +10,8 @@ use winit::{
 mod load_pcd;
 use load_pcd::{Point, load_pcd, load_pcd_paths};
 
+mod adapter_info;
+
 use glam::{Mat4, Vec3};
 
 #[repr(C)]
@@ -262,7 +264,7 @@ impl<'a> State<'a> {
         //         }
         //     };
         let pcd_paths: Vec<String> = vec![
-            "/Users/kenji/workspace/Rust/rerun-sample/data/Laser_map/Laser_map_130.pcd".to_string(),
+            "/home/kenji/workspace/Rust/wgpu-sample-rendering/data/Laser_map_130.pcd".to_string(),
         ];
 
         let mut laser_map_points: Vec<(f32, f32, f32)> = Vec::new();
@@ -299,6 +301,15 @@ impl<'a> State<'a> {
             })
             .await
             .unwrap();
+
+        let adapter_info = adapter.get_info();
+        println!(
+            "Using backend: {:?}, device: {}, vendor: {:#x})",
+            adapter_info.backend, adapter_info.name, adapter_info.vendor
+        );
+
+        let adapter_limits = adapter.limits();
+        adapter_info::display_adapter_limits_info(&adapter_limits);
 
         let buffer_limits = adapter.limits();
         println!(
