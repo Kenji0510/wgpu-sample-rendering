@@ -202,9 +202,9 @@ impl<'a> State<'a> {
         //             panic!();
         //         }
         //     };
-        let pcd_paths: Vec<String> = vec![
-            "/Users/kenji/workspace/Rust/rerun-sample/data/Laser_map/Laser_map_130.pcd".to_string(),
-        ];
+        let pcd_path: &str = "/Users/kenji/workspace/Rust/rerun-sample/data/combined_data_none_color/combined_105.pcd";
+        // let pcd_path: &str = "/Users/kenji/workspace/Rust/rerun-sample/data/Laser_map/Laser_map_130.pcd";
+        let pcd_paths: Vec<String> = vec![pcd_path.to_string()];
 
         let mut laser_map_points: Vec<(f32, f32, f32)> = Vec::new();
 
