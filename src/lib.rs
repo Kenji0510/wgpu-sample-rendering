@@ -1,3 +1,4 @@
+use rand::Rng;
 use wgpu::util::DeviceExt;
 use winit::{
     event::*,
@@ -31,6 +32,7 @@ struct Uniforms {
 struct Instance {
     offset: [f32; 3],
     scale: f32,
+    color: [f32; 3],
 }
 
 pub struct DepthTexture {
@@ -89,6 +91,11 @@ impl Instance {
                     offset: 12,
                     shader_location: 3,
                     format: wgpu::VertexFormat::Float32,
+                },
+                wgpu::VertexAttribute {
+                    offset: 12 + 4,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
             ],
         }
@@ -166,6 +173,23 @@ const INDICES: &[u16] = &[
 const CHUNK_SIZE: u64 = 256 * 1024 * 1024; // 256MB
 const FLOAT_PER_CHUNK: usize = (CHUNK_SIZE / 4) as usize;
 const TOTAL_FLOATS: usize = FLOAT_PER_CHUNK * 4;
+
+fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
+    let i = (h * 6.0).floor();
+    let f = h * 6.0 - i;
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - f * s);
+    let t = v * (1.0 - (1.0 - f) * s);
+    match i as i32 % 6 {
+        0 => [v, t, p],
+        1 => [q, v, p],
+        2 => [p, v, t],
+        3 => [p, q, v],
+        4 => [t, p, v],
+        5 => [v, p, q],
+        _ => [v, t, p], // fallback
+    }
+}
 
 struct State<'a> {
     surface: wgpu::Surface<'a>,
@@ -425,6 +449,7 @@ impl<'a> State<'a> {
             instances.push(Instance {
                 offset: pos.to_array(),
                 scale: 0.1,
+                color: [0.1, 0.2, 0.5],
             })
         }
 
@@ -597,6 +622,28 @@ impl<'a> State<'a> {
         let uniforms = Uniforms {
             transform: mvp.to_cols_array_2d(),
         };
+
+        let mut rng = rand::thread_rng();
+
+        for instance in &mut self.instances {
+            let h = rng.gen_range(0.3..1.0);
+            let s = rng.gen_range(0.3..1.0);
+            let v = rng.gen_range(0.3..1.0);
+            instance.color = hsv_to_rgb(h, s, v);
+        }
+
+        // self.instance_buffer = self
+        //     .device
+        //     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //         label: Some("Instance Buffer"),
+        //         contents: bytemuck::cast_slice(&self.instances),
+        //         usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        //     });
+        self.queue.write_buffer(
+            &self.instance_buffer,
+            0,
+            bytemuck::cast_slice(&self.instances),
+        );
 
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
